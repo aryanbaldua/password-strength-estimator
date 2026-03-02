@@ -4,9 +4,11 @@ AI Password Strength Estimator
 1. Extract features from the user info and the password
 2. Scoring (Postive points for good features, negative for bad features)
 3. Feedback (suggestions to strengthen password based on true features)
-
+4. Clean, split, scale dataset
+5. 
 """
 
+import math
 from datetime import datetime
 from feature_helpers import (
     compute_max_run_length,
@@ -18,7 +20,6 @@ from feature_helpers import (
     contains_birth_combo,
 )
 
-# extact password strength features like length, types of chars, and other patterns
 def extract_features(password: str):
     features = {}
     
@@ -39,7 +40,6 @@ def extract_features(password: str):
     
     return features
 
-# extract features related to the personal user info entered 
 def extract_personal_info_features(password, first_name, last_name, birthday):
     features = {}
     
@@ -93,22 +93,17 @@ def extract_personal_info_features(password, first_name, last_name, birthday):
     return features
 
 
-# compute a 0-100 strength score from the combined feature dict, good features gain points and bad features lose points
 def score_rules(features):
     score = 0
     # the good ones
-
-    # length gets + 1.5 per char
     length = features.get('length', 0)
     score += min(length * 1.5, 30)
 
-    # bonuses for longer 
     if length >= 12:
         score += 10
     if length >= 16:
         score += 5
 
-    # character variety (10 each)
     if features.get('num_lower', 0) > 0:
         score += 10
     if features.get('num_upper', 0) > 0:
@@ -118,25 +113,19 @@ def score_rules(features):
     if features.get('num_symbols', 0) > 0:
         score += 10
 
-    # high uniqueness ratio gets 15
     if features.get('unique_ratio', 0) > 0.7:
         score += 15
 
     # the bad ones
-
-    # common dictionary words
     if features.get('has_dictionary_word', False):
         score -= 15
 
-    # sequential patterns
     if features.get('has_sequence', False):
         score -= 10
 
-    # trailing year
     if features.get('ends_with_year', False):
         score -= 5
 
-    # repeated characters penalty
     max_run = features.get('max_run_length', 0)
     if max_run >= 3:
         score -= 5
@@ -147,8 +136,6 @@ def score_rules(features):
         score -= 10
 
     # personal info penalties
-
-    # name penalties
     has_first = features.get('contains_first_name', False)
     has_last = features.get('contains_last_name', False)
     has_full = features.get('contains_full_name', False)
@@ -163,7 +150,6 @@ def score_rules(features):
     elif has_fragment and not has_first and not has_last:
         score -= 10
 
-    # birthday penalties
     has_combo = features.get('contains_birth_combo', False)
     has_year = features.get('contains_birth_year', False)
     has_year_2d = features.get('contains_birth_year_2digit', False)
@@ -179,7 +165,6 @@ def score_rules(features):
     return score
 
 
-# score to strength label mapping
 def label_from_score(score):
     if score < 40:
         return "weak"
@@ -189,19 +174,15 @@ def label_from_score(score):
         return "strong"
 
 
-# generate 2-4 human-readable feedback strings based on detected weaknesses
-# prioritizes the most impactful issues so the user knows what to fix first
 def generate_feedback(features):
     feedback = []
 
-    # --- Length feedback (most important) ---
     length = features.get('length', 0)
     if length < 8:
         feedback.append("Use at least 8 characters (12+ is even better).")
     elif length < 12:
         feedback.append("Try making your password 12+ characters for extra strength.")
 
-    # --- Character variety ---
     missing_types = []
     if features.get('num_upper', 0) == 0:
         missing_types.append("uppercase letters")
@@ -212,26 +193,21 @@ def generate_feedback(features):
     if features.get('num_symbols', 0) == 0:
         missing_types.append("symbols (e.g. !@#$)")
 
+
     if missing_types:
         feedback.append("Add " + ", ".join(missing_types) + " for more variety.")
-
-    # --- Pattern warnings ---
     if features.get('has_dictionary_word', False):
         feedback.append("Avoid common words like 'password', 'admin', or 'login'.")
-
     if features.get('has_sequence', False):
         feedback.append("Avoid sequences like 'abc', '123', or 'qwerty'.")
-
     if features.get('ends_with_year', False):
         feedback.append("Avoid ending with a year (e.g. 2024).")
-
     if features.get('max_run_length', 0) >= 3:
         feedback.append("Avoid repeating the same character many times (e.g. 'aaa').")
-
     if features.get('unique_ratio', 1) < 0.4:
         feedback.append("Use more varied characters — too many repeats.")
 
-    # --- Personal info warnings ---
+
     if features.get('contains_full_name', False):
         feedback.append("Your password contains your full name — avoid this.")
     elif features.get('contains_first_name', False) or features.get('contains_last_name', False):
@@ -246,16 +222,63 @@ def generate_feedback(features):
     elif features.get('contains_birth_year_2digit', False):
         feedback.append("Your password may contain part of your birth year.")
 
-    # if nothing wrong was found, give a positive message
     if not feedback:
         feedback.append("Great password! No obvious weaknesses detected.")
 
-    # cap at 4 messages so the user isn't overwhelmed
     return feedback[:4]
 
 
-# single entry point that combines everything: features, score, label, feedback
-# returns a dict ready for display or JSON output
+ML_FEATURE_KEYS = [
+    "length", "num_lower", "num_upper", "num_digits", "num_symbols",
+    "num_unique_chars", "unique_ratio", "max_run_length",
+    "has_sequence", "has_dictionary_word", "ends_with_year",
+]
+
+SCALER_MEAN = [9.4353, 2.6196, 2.6043, 0.9965, 3.2149, 8.944, 0.9563, 1.0858, 0.005, 0.0, 0.0]
+SCALER_STD = [4.0164, 1.7687, 1.7462, 1.0333, 2.0146, 3.7102, 0.0667, 0.2822, 0.0705, 1.0, 1.0]
+
+
+_COEFS = [
+    [-4.6000, -3.0783, -2.8685, -1.6197, -3.1512, -5.8392, 0.6689, 0.2465, 0.0746, 0.0, 0.0],
+    [2.9390, 1.7470, 1.7059, 1.2377, 2.2122, -0.3610, 0.1021, -0.1164, 0.0370, 0.0, 0.0],
+    [1.6610, 1.3313, 1.1627, 0.3820, 0.9390, 6.2003, -0.7710, -0.1301, -0.1116, 0.0, 0.0],
+]
+_INTERCEPTS = [-15.6016, 7.7061, 7.8955]
+ML_LABEL_MAP = {0: "weak", 1: "ok", 2: "strong"}
+
+
+def predict_ml(features):
+    raw = []
+    for key in ML_FEATURE_KEYS:
+        val = features.get(key, 0)
+        if isinstance(val, bool):
+            val = int(val)
+        raw.append(float(val))
+
+    scaled = [(raw[i] - SCALER_MEAN[i]) / SCALER_STD[i] for i in range(len(raw))]
+
+    logits = []
+    for c in range(3):
+        logit = _INTERCEPTS[c]
+        for i in range(len(scaled)):
+            logit += _COEFS[c][i] * scaled[i]
+        logits.append(logit)
+
+    max_logit = max(logits)
+    exps = [math.exp(l - max_logit) for l in logits]  # subtract max for numerical stability
+    total = sum(exps)
+    probs = [e / total for e in exps]
+
+    predicted_class = probs.index(max(probs))
+
+    return ML_LABEL_MAP[predicted_class], {
+        "weak": round(probs[0], 4),
+        "ok": round(probs[1], 4),
+        "strong": round(probs[2], 4),
+    }
+
+
+
 def estimate_strength_rules(password, first_name="", last_name="", birthday=""):
     pw_features = extract_features(password)
     personal_features = extract_personal_info_features(
@@ -274,10 +297,7 @@ def estimate_strength_rules(password, first_name="", last_name="", birthday=""):
     }
 
 
-# demo: score a few sample passwords with fake user context
-# (no real personal info is used or stored)
 if __name__ == "__main__":
-    # fake context for demo purposes only
     demo_context = {
         "first_name": "Jane",
         "last_name": "Doe",
