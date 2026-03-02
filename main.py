@@ -166,9 +166,9 @@ def score_rules(features):
 
 
 def label_from_score(score):
-    if score < 40:
+    if score <= 60:
         return "weak"
-    elif score <= 70:
+    elif score <= 80:
         return "ok"
     else:
         return "strong"
@@ -226,6 +226,40 @@ def generate_feedback(features):
         feedback.append("Great password! No obvious weaknesses detected.")
 
     return feedback[:4]
+
+
+def personal_info_penalty(features):
+    # returns the total penalty to subtract for personal info usage.
+    # kept separate so estimate_strength() can apply it on top of the ML base score
+    # without re-running the full rule-based scorer.
+    penalty = 0
+
+    has_first = features.get('contains_first_name', False)
+    has_last = features.get('contains_last_name', False)
+    has_full = features.get('contains_full_name', False)
+    has_fragment = features.get('contains_name_fragment', False)
+
+    if has_first:
+        penalty += 20
+    if has_last:
+        penalty += 20
+    if has_full:
+        penalty += 10
+    elif has_fragment and not has_first and not has_last:
+        penalty += 10
+
+    has_combo = features.get('contains_birth_combo', False)
+    has_year = features.get('contains_birth_year', False)
+    has_year_2d = features.get('contains_birth_year_2digit', False)
+
+    if has_combo:
+        penalty += 25
+    elif has_year:
+        penalty += 10
+    elif has_year_2d:
+        penalty += 5
+
+    return penalty
 
 
 ML_FEATURE_KEYS = [
@@ -297,6 +331,39 @@ def estimate_strength_rules(password, first_name="", last_name="", birthday=""):
     }
 
 
+# midpoint of each label band — used to convert ML label to a numeric base score.
+# weak: 0-60 → 30, ok: 61-80 → 70, strong: 81-100 → 90
+_ML_BASE_SCORE = {"weak": 30, "ok": 70, "strong": 90}
+
+
+def estimate_strength(password, first_name="", last_name="", birthday=""):
+    pw_features = extract_features(password)
+    personal_features = extract_personal_info_features(
+        password, first_name, last_name, birthday
+    )
+    all_features = {**pw_features, **personal_features}
+
+    # ML model judges password structure (length, variety, patterns).
+    # it was trained on real passwords, so it generalizes better than pure rules.
+    ml_label, _ = predict_ml(pw_features)
+    base_score = _ML_BASE_SCORE[ml_label]
+
+    # rule system applies personal info penalties on top.
+    # ML was never trained with personal context, so rules handle this part.
+    # personal info can only lower the score, never raise it.
+    penalty = personal_info_penalty(all_features)
+    final_score = int(max(0, min(100, base_score - penalty)))
+
+    label = label_from_score(final_score)
+    feedback = generate_feedback(all_features)
+
+    return {
+        "score": final_score,
+        "label": label,
+        "feedback": feedback,
+    }
+
+
 if __name__ == "__main__":
     demo_context = {
         "first_name": "Jane",
@@ -313,7 +380,7 @@ if __name__ == "__main__":
     ]
 
     for pw in sample_passwords:
-        result = estimate_strength_rules(
+        result = estimate_strength(
             pw,
             demo_context["first_name"],
             demo_context["last_name"],

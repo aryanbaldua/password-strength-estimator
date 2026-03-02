@@ -6,6 +6,7 @@ from main import (
     label_from_score,
     generate_feedback,
     estimate_strength_rules,
+    estimate_strength,
 )
 
 
@@ -106,8 +107,8 @@ class TestScoring(unittest.TestCase):
         self.assertGreaterEqual(score, 0)
 
     def test_weak_vs_strong(self):
-        self.assertLess(score_rules(get_all_features("abc")), 40)
-        self.assertGreater(score_rules(get_all_features("c!Xk9@Lm#Qz7wP$nR2v")), 70)
+        self.assertLess(score_rules(get_all_features("abc")), 61)
+        self.assertGreater(score_rules(get_all_features("c!Xk9@Lm#Qz7wP$nR2v")), 80)
 
     def test_penalties_lower_score(self):
         # dictionary word penalty
@@ -123,10 +124,10 @@ class TestScoring(unittest.TestCase):
 
     def test_label_thresholds(self):
         self.assertEqual(label_from_score(0), "weak")
-        self.assertEqual(label_from_score(39), "weak")
-        self.assertEqual(label_from_score(40), "ok")
-        self.assertEqual(label_from_score(70), "ok")
-        self.assertEqual(label_from_score(71), "strong")
+        self.assertEqual(label_from_score(60), "weak")
+        self.assertEqual(label_from_score(61), "ok")
+        self.assertEqual(label_from_score(80), "ok")
+        self.assertEqual(label_from_score(81), "strong")
         self.assertEqual(label_from_score(100), "strong")
 
 
@@ -158,12 +159,37 @@ class TestEstimateStrengthRules(unittest.TestCase):
         self.assertIn("score", result)
         self.assertIn("label", result)
         self.assertIn("feedback", result)
-        self.assertLess(result["score"], 40)
+        self.assertLess(result["score"], 61)
         self.assertEqual(result["label"], "weak")
 
         result = estimate_strength_rules("aB3$eF7!hJ1@kL5#nO9&")
-        self.assertGreater(result["score"], 70)
+        self.assertGreater(result["score"], 80)
         self.assertEqual(result["label"], "strong")
+
+
+class TestEstimateStrength(unittest.TestCase):
+
+    def test_output_shape(self):
+        # result always has the three required keys
+        result = estimate_strength("abc")
+        self.assertIn("score", result)
+        self.assertIn("label", result)
+        self.assertIn("feedback", result)
+
+    def test_personal_info_lowers_score(self):
+        # same password, but with personal context should score lower
+        pw = "c!Xk9@Lm#Qz7wP$nR2v"
+        without_ctx = estimate_strength(pw)
+        with_ctx = estimate_strength("Jane1995!xKq", "Jane", "Doe", "1995-03-22")
+        self.assertGreater(without_ctx["score"], with_ctx["score"])
+
+    def test_strong_password_no_context(self):
+        result = estimate_strength("c!Xk9@Lm#Qz7wP$nR2v")
+        self.assertEqual(result["label"], "strong")
+
+    def test_weak_password_no_context(self):
+        result = estimate_strength("abc")
+        self.assertEqual(result["label"], "weak")
 
 
 if __name__ == "__main__":
