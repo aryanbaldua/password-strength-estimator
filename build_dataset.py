@@ -2,10 +2,10 @@ import csv
 import random
 from main import extract_features
 
-INPUT_FILE = "dataset_raw.csv"
-TRAIN_FILE = "dataset_train.csv"
-VAL_FILE = "dataset_val.csv"
-TEST_FILE = "dataset_test.csv"
+INPUT_FILE = "data/dataset_raw.csv"
+TRAIN_FILE = "data/dataset_train.csv"
+VAL_FILE = "data/dataset_val.csv"
+TEST_FILE = "data/dataset_test.csv"
 
 SEED = 42
 

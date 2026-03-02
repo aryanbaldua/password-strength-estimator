@@ -1,12 +1,7 @@
 """
-Phase 5 — Streamlit demo app for the password strength estimator.
+streamlit demo for the password strength estimator
 
-Flow:
-  1. User optionally enters first name, last name, birthday (month/day/year dropdowns)
-  2. User enters a password
-  3. Results update in real time: score (number + bar), label, feedback
-
-Privacy: all inputs are processed in memory only and never stored or logged.
+personal info and password are processed in memory only and never stored
 """
 
 import calendar
@@ -15,16 +10,14 @@ from main import estimate_strength
 
 st.set_page_config(page_title="Password Strength Estimator", layout="centered")
 
-# colors for each strength label
+# color for each strength label
 LABEL_COLOR = {
     "weak":   "#e74c3c",  # red
     "ok":     "#f39c12",  # orange
     "strong": "#2ecc71",  # green
 }
 
-# inject a small amount of CSS:
-# - hide the default streamlit footer and hamburger menu
-# - style the colored progress bar we render manually
+# hide streamlit's default footer and menu, and define styles for the bar and feedback cards
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
@@ -52,7 +45,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Header ---
 st.title("Password Strength Estimator")
 st.markdown(
     "<small style='color: gray;'>Inputs are processed in memory only and never stored.</small>",
@@ -60,7 +52,6 @@ st.markdown(
 )
 st.divider()
 
-# --- Personal info (optional) ---
 st.markdown("### Personal Info <small style='color: gray; font-weight: normal;'>(optional)</small>", unsafe_allow_html=True)
 st.caption("Helps detect if your password contains your name or birthday.")
 
@@ -82,6 +73,7 @@ with col_d:
 with col_y:
     year_sel = st.selectbox("Year", YEAR_OPTIONS)
 
+# convert dropdowns to YYYY-MM-DD for the backend, only if all three are set
 birthday = ""
 if month_sel != "—" and day_sel != "—" and year_sel != "—":
     month_num = list(calendar.month_name).index(month_sel)
@@ -89,11 +81,10 @@ if month_sel != "—" and day_sel != "—" and year_sel != "—":
 
 st.divider()
 
-# --- Password input ---
 st.markdown("### Password")
 password = st.text_input("Enter your password", type="password", placeholder="Type your password here...")
 
-# --- Results ---
+# results update in real time as the user types
 if password:
     result = estimate_strength(password, first_name, last_name, birthday)
     score = result["score"]
@@ -103,7 +94,7 @@ if password:
 
     st.divider()
 
-    # label + score on one line
+    # label and score side by side
     col_label, col_score = st.columns([2, 1])
     with col_label:
         st.markdown(
@@ -116,14 +107,13 @@ if password:
             unsafe_allow_html=True,
         )
 
-    # colored progress bar
+    # colored bar that fills based on score
     st.markdown(f"""
         <div class="strength-bar-bg">
             <div class="strength-bar-fill" style="width: {score}%; background-color: {color};"></div>
         </div>
     """, unsafe_allow_html=True)
 
-    # feedback
     st.markdown("#### Suggestions")
     for msg in feedback:
         st.markdown(

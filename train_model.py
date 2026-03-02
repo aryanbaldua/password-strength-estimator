@@ -72,9 +72,9 @@ def print_evaluation(name, y_true, y_pred):
 def main():
     # --- 1. Load data ---
     print("Loading datasets...")
-    X_train, y_train = load_csv("dataset_train.csv")
-    X_val, y_val = load_csv("dataset_val.csv")
-    X_test, y_test = load_csv("dataset_test.csv")
+    X_train, y_train = load_csv("data/dataset_train.csv")
+    X_val, y_val = load_csv("data/dataset_val.csv")
+    X_test, y_test = load_csv("data/dataset_test.csv")
 
     print(f"  train: {X_train.shape[0]} rows, val: {X_val.shape[0]} rows, test: {X_test.shape[0]} rows")
 
